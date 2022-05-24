@@ -40,6 +40,9 @@ public static class Example
 						// Считали всё
 						return;
 					}
+					catch(Exception e) {
+						inputChannel.Writer.TryComplete(e)
+					}
 				}
 			}));
 
