@@ -96,7 +96,6 @@ public static class Example
 					catch (ChannelClosedException)
 					{
 						resultChannel.Writer.TryComplete();
-						inputChannel.Writer.TryComplete();
 					}
 					catch (Exception e)
 					{
@@ -122,7 +121,8 @@ public static class Example
 		int degreeOfParallelism)
 	{
 		var queue = new ConcurrentQueue<TItem>(items);
-
+		var exceptionCts = new CancellationTokenSource();
+		
 		var workers = Enumerable.Range(0, degreeOfParallelism)
 			.Select(_ => Task.Run(async () =>
 			{
@@ -130,17 +130,30 @@ public static class Example
 				
 				while (queue.TryDequeue(out var item))
 				{
+					exceptionCts.ThrowIfCancellationRequested();
 					localResult.Add(await processor(item));
 				}
 
 				return localResult;
 			}))
-			.ToArray();
+			.ToList();
 			
-		// Тут нужно договориться о том, какую семантику мы хотим для исключений (упасть сразу? доделать всё? вернуть хоть что-то?),
-		// потому что await на WhenAll крайне странно работает с исключениями: он доделывает работу, после чего падает с первым экспешеном, что в данном случае не очень полезно.
-		var results = await Task.WhenAll(workers);
+		while(workers.Any()) {
+			try {
+				var task = await Task.WhenAny(workers);
+				
+				if(!task.IsRanToCompletion) {
+					exceptionCts.Cancel();
+					// Rethrow exception
+					await task;
+				}
 
-		return results.SelectMany(x => x).ToList();
+				workers.Remove(task);
+			}
+			catch(Exception e) {
+				exceptionCts.Cancel();
+				throw;
+			}
+		}
 	}
 }
