@@ -139,21 +139,15 @@ public static class Example
 			.ToList();
 			
 		while(workers.Any()) {
-			try {
-				var task = await Task.WhenAny(workers);
-				
-				if(!task.IsRanToCompletion) {
-					exceptionCts.Cancel();
-					// Rethrow exception
-					await task;
-				}
-
-				workers.Remove(task);
-			}
-			catch(Exception e) {
+			var task = await Task.WhenAny(workers);
+			
+			if(!task.IsRanToCompletion) {
 				exceptionCts.Cancel();
-				throw;
+				// Rethrow exception
+				await task;
 			}
+
+			workers.Remove(task);
 		}
 	}
 }
